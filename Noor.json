@@ -1,0 +1,12 @@
+{
+  "features": [
+    {
+      "name": "FullGameUnlock",
+      "value": true
+    },
+    {
+      "name": "BypassLogin",
+      "value": true
+    }
+  ]
+}
