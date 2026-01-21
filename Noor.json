@@ -1,12 +1,10 @@
 {
-  "features": [
-    {
-      "name": "FullGameUnlock",
-      "value": true
-    },
-    {
-      "name": "BypassLogin",
-      "value": true
-    }
-  ]
+  "status": "success",
+  "data": {
+    "features": [
+      { "name": "FullGameUnlock", "value": true },
+      { "name": "BypassLogin", "value": true },
+      { "name": "ShowMenu", "value": true }
+    ]
+  }
 }
