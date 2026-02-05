@@ -1,0 +1,17 @@
+name: Build EXE
+on: [push]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Dependencies
+        run: pip install pycryptodome pypiwin32 requests pyinstaller
+      - name: Build with PyInstaller
+        run: pyinstaller --onefile --noconsole main.py
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: PC_Tool_Noor
+          path: dist/main.exe
+          
