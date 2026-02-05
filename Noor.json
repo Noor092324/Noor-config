@@ -1,4 +1,6 @@
 {
-  "status": "ready_for_hits",
-  "extracted_data": []
+  "status": "Waiting for connection",
+  "link": "No link yet",
+  "last_update": "None",
+  "browser": "Google Chrome Only"
 }
