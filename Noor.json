@@ -1,6 +1,5 @@
 {
-  "status": "Waiting for connection",
-  "link": "No link yet",
-  "last_update": "None",
-  "browser": "Google Chrome Only"
+  "status": "waiting_for_connection",
+  "last_sync": "none",
+  "data": "initial_setup"
 }
